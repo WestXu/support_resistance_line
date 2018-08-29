@@ -7,8 +7,6 @@ from sklearn import metrics
 from collections import Iterable
 from sklearn.cluster import KMeans
 from scipy import optimize as sco
-import warnings
-warnings.filterwarnings("ignore")
 
 try: 
     from data_provider.nestlib.progress_bar import ProgressBar
@@ -152,48 +150,22 @@ class SupportResistanceLine():
     def find_extreme_pos(self, show=False):
         p = self.p
 
-        def bfgs_min_pos(find_min_pos, y_len, linear_interp):
-            """
-            通过scipy.interpolate.interp1d插值形成的模型，通过sco.fmin_bfgs计算min
-            :param find_min_pos: 寻找min的点位值
-            :param y_len: 原始序列长度，int
-            :param linear_interp: scipy.interpolate.interp1d插值形成的模型
-            :return: sco.fmin_bfgs成功找到的值，所有失败的或者异常都返回－1
-            """
-            
-            try:
-                local_min_pos = sco.fmin_bfgs(linear_interp, find_min_pos, disp=False)[0]
-            except:
-                # 所有失败的或者异常都返回－1
-                local_min_pos = -1
-                
-            if local_min_pos != local_min_pos: # nan
-                local_min_pos = -1
-            if local_min_pos < 0 or local_min_pos > y_len:
-                # 所有失败的或者异常都返回－1
-                local_min_pos = -1
-            return local_min_pos
-        
-        def find_one_kind(kind):
-            # 用sco.fmin_bfgs算法寻找支撑点
-            extreme_pos = progress_map(
-                lambda _: int(
-                    bfgs_min_pos(
-                        _, len(self.y), p if kind == 'min' else -p
-                    )
-                ),
-                range(0, len(self.y))
-            )
+        # 求导函数的根
+        extreme_pos = [int(round(_)) for _ in p.deriv().roots()]
 
-            # 去重
-            extreme_pos = sorted(list(set(extreme_pos)))
+        # 通过二阶导数分拣极大值和极小值
+        second_deriv = p.deriv(2)
+        min_extreme_pos = []
+        max_extreme_pos = []
+        for pos in extreme_pos:
+            if second_deriv(pos) > 0:
+                min_extreme_pos.append(pos)
+            elif second_deriv(pos) < 0:
+                max_extreme_pos.append(pos)
 
-            if -1 in extreme_pos:
-                extreme_pos.remove(-1)
+        self.min_extreme_pos = min_extreme_pos
+        self.max_extreme_pos = max_extreme_pos
 
-            return extreme_pos
-        self.min_extreme_pos = find_one_kind('min')
-        self.max_extreme_pos = find_one_kind('max')
         if show:
             fig, ax = plt.subplots(1, figsize=(16,9))
             self.df.plot(ax=ax)
@@ -474,19 +446,8 @@ class SupportResistanceLine():
         self.find_best_poly(show=show_step)
         if show_step:
             print('寻找拟合曲线极值点...')
-        if is_online:
-            self.find_extreme_pos(show=show_step)
-        else:
-            self.min_extreme_pos = [
-                1, 8, 16, 23, 33, 34, 38, 59, 78, 99, 134, 150, 188, 221, 261, 303, 368, 458, 557, 583, 
-                648, 667, 705, 726, 741, 748, 827, 873, 923, 966, 990, 1051, 1110, 1123, 1165, 1213, 
-                1255, 1302, 1358, 1390, 1408, 1445, 1456, 1490, 1544, 1576, 1590, 1601, 1607, 1611
-            ]
-            self.max_extreme_pos = [
-                0, 4, 22, 35, 45, 65, 89, 111, 143, 167, 199, 245, 282, 331, 436, 514, 625, 678, 742, 
-                786, 837, 899, 949, 1010, 1090, 1143, 1187, 1239, 1316, 1389, 1390, 1419, 1470, 1508, 
-                1554, 1584, 1595, 1605, 1609
-            ]
+        self.find_extreme_pos(show=show_step)
+
         if show_step:
             print('寻找支撑点...')
         self.find_real_extreme_points(show=show_step)
