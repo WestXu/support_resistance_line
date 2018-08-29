@@ -151,7 +151,7 @@ class SupportResistanceLine():
         p = self.p
 
         # 求导函数的根
-        extreme_pos = [round(_.real) for _ in p.deriv().roots()]
+        extreme_pos = [int(round(_.real)) for _ in p.deriv().roots()]
 
         # 通过二阶导数分拣极大值和极小值
         second_deriv = p.deriv(2)
