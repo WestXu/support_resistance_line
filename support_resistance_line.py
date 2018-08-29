@@ -363,9 +363,6 @@ class SupportResistanceLine():
             std = pd.Series(
                 cluster_df['x'].tolist() + [last_support_resistance_pos['x']]
             ).std(ddof=0)
-            mean_x = pd.Series(
-                cluster_df['x'].tolist() + [last_support_resistance_pos['x']]
-            ).mean()
             # divisor = (
             #     std
             #     # * math.sqrt(len(cluster_df) + 1)
@@ -383,7 +380,6 @@ class SupportResistanceLine():
                     'slope': cluster_df.iloc[-1]['slope'],
                     'count': len(cluster_df), 
                     'mean_distance': mean_distance,
-                    'mean_x': mean_x,
                     'std': std,
                     # 'divisor': divisor,
                     # 'score': score
@@ -431,7 +427,6 @@ class SupportResistanceLine():
 
         last_area_support_resistance_df['score'] = (
             last_area_support_resistance_df['mean_distance'].rank() 
-            * last_area_support_resistance_df['mean_x'].rank() 
             / last_area_support_resistance_df['std'].rank() 
             / (last_area_support_resistance_df['count'] + 1)
         )
