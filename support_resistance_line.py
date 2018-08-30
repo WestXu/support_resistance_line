@@ -377,6 +377,11 @@ class SupportResistanceLine():
             .reset_index(drop=True)
         )
 
+        # 整体不分组的情况也加入考虑
+        all_df = support_resistance_df.copy()
+        all_df.name = 'all'
+        score_df.loc[len(score_df)] = calc_score_for_cluster(all_df).iloc[0]
+
         return score_df
     
     def show_line(self, points_df, *straight_line_list):
