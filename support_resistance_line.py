@@ -323,6 +323,8 @@ class SupportResistanceLine():
 
         # 过滤掉斜率过大的线
         support_resistance_df = support_resistance_df[support_resistance_df['slope'].abs() / self.y.mean() < 0.003]
+        if len(support_resistance_df) <= 2:
+            return pd.DataFrame()
             
         # 聚类
         thresh = 0.03
