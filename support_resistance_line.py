@@ -55,7 +55,7 @@ class StraightLine():
             import ipdb; ipdb.set_trace()
         return y0 > pred_y
     
-    def predict(self, x_list, limit):
+    def predict(self, x_list, limit=None):
         if not isinstance(x_list, Iterable):
             x_list = [x_list]
         results = [self.slope * _ + self.intercept for _ in x_list]
@@ -109,7 +109,7 @@ class SupportResistanceLine():
         self.y.name = 'y'
         self.df = pd.DataFrame({'y': self.y})
         self.df.index.name = 'x'
-        self.x = self.df.index
+        self.x = self.df.reset_index()['x']
         
         self.kind = kind
         self.dot_color = 'g' if kind == 'support' else 'r'
