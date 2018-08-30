@@ -306,6 +306,9 @@ class SupportResistanceLine():
             # & (self.support_resistance_df['x'] >= len(self.df) * 0.25)
         ].copy()
 
+        if len(support_resistance_df) <= 2:
+            return pd.DataFrame()
+
         # 计算经过各个点的斜率
         support_resistance_df['slope'] = support_resistance_df.apply(
             lambda _: StraightLine(_['x'], _['y'], last_support_resistance_pos['x'], last_support_resistance_pos['y']).slope, 
@@ -322,7 +325,14 @@ class SupportResistanceLine():
         support_resistance_df = support_resistance_df[support_resistance_df['slope'].abs() / self.y.mean() < 0.003]
             
         # 聚类
-        support_resistance_df['cluster'] = clustering_kmeans(support_resistance_df['slope'])
+        thresh = 0.03
+        support_resistance_df['cluster'] = clustering_kmeans(support_resistance_df['slope'], thresh)
+        while support_resistance_df.groupby('cluster').apply(len).max() <= 2: # 如果个数最多的类还不超过2个
+            thresh *= 2
+            if thresh >= 1:
+                return pd.DataFrame()
+            support_resistance_df['cluster'] = clustering_kmeans(support_resistance_df['slope'], thresh)
+
 
         def calc_score_for_cluster(cluster_df):
             if len(cluster_df) <= 2:
@@ -397,6 +407,9 @@ class SupportResistanceLine():
         df_list = [self.score_lines_from_a_point(row) for index, row in last_area_support_resistance_df.iterrows()]
         
         last_area_support_resistance_df = pd.concat(df_list)
+
+        if len(last_area_support_resistance_df) == 0:
+            raise ValueError(f"未找到{'支撑线' if self.kind == 'support' else '压力线'}，可能因为时间序列过短。")
 
         last_area_support_resistance_df['mean_distance_rank'] = last_area_support_resistance_df['mean_distance'].rank()
         last_area_support_resistance_df['mean_x_rank'] = last_area_support_resistance_df['mean_x'].rank()
