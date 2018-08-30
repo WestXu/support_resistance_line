@@ -325,7 +325,7 @@ class SupportResistanceLine():
         support_resistance_df['cluster'] = clustering_kmeans(support_resistance_df['slope'])
 
         def calc_score_for_cluster(cluster_df):
-            if len(cluster_df) <= 1:
+            if len(cluster_df) <= 2:
                 return pd.DataFrame()
 
 
@@ -333,12 +333,8 @@ class SupportResistanceLine():
             avg_y = cluster_df.iloc[:-1]['y'].mean()
             line = StraightLine(cluster_df.iloc[-1]['x'], cluster_df.iloc[-1]['y'], slope=cluster_df.iloc[-1]['slope'])
             mean_distance = line.point_distance(avg_x, avg_y)
-            std = pd.Series(
-                cluster_df['x'].tolist() + [last_support_resistance_pos['x']]
-            ).std(ddof=0)
-            mean_x = pd.Series(
-                cluster_df['x'].tolist() + [last_support_resistance_pos['x']]
-            ).mean()
+            std = cluster_df.iloc[:-1]['x'].std(ddof=0)
+            mean_x = cluster_df.iloc[:-1]['x'].mean()
             # divisor = (
             #     std
             #     # * math.sqrt(len(cluster_df) + 1)
@@ -354,7 +350,7 @@ class SupportResistanceLine():
                     'x2': cluster_df.iloc[-1]['x'],
                     'y2': cluster_df.iloc[-1]['y'],
                     'slope': cluster_df.iloc[-1]['slope'],
-                    'count': len(cluster_df), 
+                    'count': len(cluster_df) - 1, 
                     'mean_distance': mean_distance,
                     'mean_x': mean_x,
                     'std': std,
@@ -402,11 +398,12 @@ class SupportResistanceLine():
         
         last_area_support_resistance_df = pd.concat(df_list)
 
-        last_area_support_resistance_df['score'] = (
-            last_area_support_resistance_df['mean_distance'].rank() 
-            / last_area_support_resistance_df['mean_x'].rank() 
-            / last_area_support_resistance_df['std'].rank() 
-            / (last_area_support_resistance_df['count'] + 1)
+        last_area_support_resistance_df['mean_distance_rank'] = last_area_support_resistance_df['mean_distance'].rank()
+        last_area_support_resistance_df['mean_x_rank'] = last_area_support_resistance_df['mean_x'].rank()
+        last_area_support_resistance_df['std_rank'] = last_area_support_resistance_df['std'].rank()
+        last_area_support_resistance_df['score'] = last_area_support_resistance_df.apply(
+            lambda _: _['mean_distance_rank'] / _['mean_x_rank'] / _['std_rank'] / _['count'], 
+            axis=1
         )
 
         self.last_area_support_resistance_df = last_area_support_resistance_df.sort_values('score').reset_index(drop=True)
