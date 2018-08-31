@@ -418,15 +418,19 @@ class SupportResistanceLine():
         if len(last_area_support_resistance_df) == 0:
             raise ValueError(f"未找到{'支撑线' if self.kind == 'support' else '压力线'}，可能因为时间序列过短。")
 
-        last_area_support_resistance_df['mean_distance_rank'] = last_area_support_resistance_df['mean_distance'].rank()
-        last_area_support_resistance_df['mean_x_rank'] = last_area_support_resistance_df['mean_x'].rank()
-        last_area_support_resistance_df['std_rank'] = last_area_support_resistance_df['std'].rank()
-        last_area_support_resistance_df['score'] = last_area_support_resistance_df.apply(
-            lambda _: _['mean_distance_rank'] / _['mean_x_rank'] / _['std_rank'] / _['count'], 
-            axis=1
+        last_area_support_resistance_df['score'] = (
+            (
+                last_area_support_resistance_df['mean_distance'] 
+                / last_area_support_resistance_df['mean_x'] 
+                / last_area_support_resistance_df['std']
+            ).rank() 
+            / last_area_support_resistance_df['count']
         )
 
-        self.last_area_support_resistance_df = last_area_support_resistance_df.sort_values('score').reset_index(drop=True)
+        self.last_area_support_resistance_df = last_area_support_resistance_df.sort_values(
+            ['score', 'count'], 
+            ascending=[True, False]
+        ).reset_index(drop=True)
         
         return self.last_area_support_resistance_df
         
