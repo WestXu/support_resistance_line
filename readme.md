@@ -26,8 +26,8 @@
 
 4.找线
 
-从最后一个支撑点出发，和其之前的所有支撑点连线。对斜率用Kmeans聚类，每类取最下方一条线，该类点个数为count，该类所有点到该直线的平均距离为mean_distance，该类所有点的横坐标标准差为std，平均值为mean_x，评分公式为
-(mean_distance / std / mean_x).rank() / count
+从最后一个支撑点出发，和其之前的所有支撑点连线。对斜率用Kmeans聚类，每类取最下方一条线，该类点个数为$Count$，该类所有点到该直线的平均距离为$\overline {Distance}$，该类所有点的横坐标标准差为$X_{std}$，平均值为$\overline X$，评分公式为
+$$ Score = \frac{Rank(\overline {Distance} / X_{std} / \overline X)}{Count}$$
 最终线为所有聚类的线评分最小的。
 对序列后四分之一的所有支撑点遍历以上过程，寻找最好的线。
 
