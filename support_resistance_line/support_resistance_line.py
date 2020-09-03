@@ -87,6 +87,15 @@ class SupportResistanceLine:
         self.dot_color = 'g' if kind == 'support' else 'r'
 
     @cached_property
+    def twin(self):
+        srl = SupportResistanceLine(
+            self.y, 'resistance' if self.kind == 'support' else 'support'
+        )
+        srl.df = self.df
+        srl.extreme_pos = self.extreme_pos
+        return srl
+
+    @cached_property
     def iterated_poly_fits(
         self,
     ) -> Tuple[pd.DataFrame, np.polynomial.chebyshev.Chebyshev]:
@@ -471,9 +480,7 @@ class SupportResistanceLine:
         print('遍历从时间序列后25%区域出发的所有支撑线...')
         self.last_area_support_resistance_df
 
-        resistance_line = SupportResistanceLine(self.y, 'resistance')
-        resistance_line.df = self.df
-        resistance_line.extreme_pos = self.extreme_pos
+        resistance_line = self.twin
 
         print('寻找阻力点...')
         resistance_line.plot_real_extreme_points(show=True)
@@ -509,9 +516,7 @@ class SupportResistanceLine:
             label='support_dots',
         )
 
-        resistance_line = SupportResistanceLine(self.y, 'resistance')
-        resistance_line.df = self.df
-        resistance_line.extreme_pos = self.extreme_pos
+        resistance_line = self.twin
 
         ax.scatter(
             resistance_line.support_resistance_df.x,
