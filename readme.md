@@ -1,4 +1,48 @@
-# 支撑线压力线绘制
+# Support Resistance Line
+
+## Installation
+
+You can install from pypi using `pip install support_resistance_line`, or install from source using `python3 setup.py install`
+
+## How to Use
+
+### One-Liner
+
+```python
+SupportResistanceLine(pd.Series(some_data)).plot_both()
+```
+
+![example](example.png)
+
+### Runnable Example
+
+```python
+import numpy as np
+import pandas as pd
+from support_resistance_line import SupportResistanceLine
+
+
+# Generate a random series
+sr = pd.Series(np.random.random(size=250))
+# ... moving avg to make it more trending
+sr = sr.rolling(50).mean().dropna()
+
+# Init. Index will be ignored
+srl = SupportResistanceLine(sr, kind='support')
+
+# Plot the best 3 support lines
+srl.plot_top_lines()
+# Plot the best 3 resistance lines
+srl.twin.plot_top_lines()
+
+# Plot the best support & resistance lines
+srl.plot_both()
+
+# View the logic steps if you want
+srl.plot_steps()
+```
+
+## Incentive
 
 支撑线（support line）又称为抵抗线。当股价跌到某个价位附近时，股价停止下跌，甚至有可能还有回升，这是因为多方在此买入造成的。支撑线起阻止股价继续下跌的作用。这个起着阻止股价继续下跌或暂时阻止股价继续下跌的位置就是支撑线所在的位置。
 
@@ -10,7 +54,7 @@
 
 这套算法主要有四个步骤：多项式拟合、寻找极值、聚类分析、图像绘制。
 
-## 绘制逻辑
+## Logic
 
 1.多项式拟合
 
@@ -26,8 +70,9 @@
 
 4.找线
 
-从最后一个支撑点出发，和其之前的所有支撑点连线。对斜率用Kmeans聚类，每类取最下方一条线，该类点个数为$Count$，该类所有点到该直线的平均距离为$\overline {Distance}$，该类所有点的横坐标标准差为$X_{std}$，平均值为$\overline X$，评分公式为
-$$ Score = \frac{Rank(\overline {Distance} / X_{std} / \overline X)}{Count}$$
+从最后一个支撑点出发，和其之前的所有支撑点连线。对斜率用Kmeans聚类，每类取最下方一条线，该类点个数为![](https://latex.codecogs.com/svg.latex?Count)，该类所有点到该直线的平均距离为![](https://latex.codecogs.com/svg.latex?\overline%20{Distance})，该类所有点的横坐标标准差为![](https://latex.codecogs.com/svg.latex?X_{std})，平均值为![](https://latex.codecogs.com/svg.latex?\overline%20X)，评分公式为
+![](https://latex.codecogs.com/svg.latex?Score%20=%20\frac{Rank(\overline%20{Distance}%20/%20X_{std}%20/%20\overline%20X)}{Count})
+
 最终线为所有聚类的线评分最小的。
 对序列后四分之一的所有支撑点遍历以上过程，寻找最好的线。
 
