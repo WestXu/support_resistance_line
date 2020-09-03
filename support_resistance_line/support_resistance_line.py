@@ -11,7 +11,14 @@ from sklearn.cluster import KMeans
 
 
 class StraightLine:
-    def __init__(self, x1=None, y1=None, x2=None, y2=None, slope=None):
+    def __init__(
+        self,
+        x1: float = None,
+        y1: float = None,
+        x2: float = None,
+        y2: float = None,
+        slope: Optional[float] = None,
+    ):
 
         if slope is not None:
             self.slope = slope
@@ -19,21 +26,23 @@ class StraightLine:
             if x1 == x2:
                 self.slope = np.nan
             else:
-                self.slope = (y2 - y1) / (x2 - x1)
-        self.intercept = y1 - self.slope * x1
+                self.slope = (y2 - y1) / (x2 - x1)  # type: ignore
+        self.intercept = y1 - self.slope * x1  # type: ignore
 
-    def get_point_distance(self, x0, y0):
+    def get_point_distance(self, x0: float, y0: float) -> float:
         return abs(self.slope * x0 - y0 + self.intercept) / math.sqrt(
             self.slope ** 2 + 1
         )
 
-    def is_point_above_line(self, x0, y0):
+    def is_point_above_line(self, x0: float, y0: float) -> bool:
         pred_y = x0 * self.slope + self.intercept
         if pred_y == y0:
             print('直线 y = {self.slope}x + {self.intercept} 穿过点({x0}, {y0})')
         return y0 > pred_y
 
-    def predict(self, x_list, limit=None):
+    def predict(
+        self, x_list: Iterable, limit: Optional[Iterable] = None
+    ) -> List[float]:
         if not isinstance(x_list, Iterable):
             x_list = [x_list]
         results = [self.slope * _ + self.intercept for _ in x_list]
@@ -46,7 +55,7 @@ class StraightLine:
         return results
 
 
-def clustering_kmeans(num_list, thresh=0.03):
+def clustering_kmeans(num_list: List[float], thresh: float = 0.03) -> List[float]:
 
     # 阻力位或者支撑位序列从1-序列个数开始聚类
     k_rng = range(1, len(num_list) + 1)
@@ -75,7 +84,9 @@ def clustering_kmeans(num_list, thresh=0.03):
 
 
 class SupportResistanceLine:
-    def __init__(self, data, kind='support'):
+    def __init__(
+        self, data: pd.Series, kind: Literal['support', 'resistance'] = 'support'
+    ):
         if not isinstance(data, pd.Series):
             raise TypeError('data必须为pd.Series格式')
 
@@ -128,7 +139,7 @@ class SupportResistanceLine:
         return fit_df, poly
 
     @cached_property
-    def best_poly(self):
+    def best_poly(self) -> np.polynomial.chebyshev.Chebyshev:
         return self.iterated_poly_fits[1]
 
     @cached_property
@@ -167,7 +178,7 @@ class SupportResistanceLine:
 
         return max_extreme_pos, min_extreme_pos
 
-    def plot_extreme_pos(self, show=False):
+    def plot_extreme_pos(self, show: bool = False):
 
         max_extreme_pos, min_extreme_pos = self.extreme_pos
 
@@ -185,7 +196,7 @@ class SupportResistanceLine:
         return fig, ax
 
     @cached_property
-    def support_resistance_pos(self):
+    def support_resistance_pos(self) -> List[int]:
         '''拟合极值点附近的真实极值'''
 
         def find_left_and_right_pos(pos, refer_pos):
@@ -241,7 +252,7 @@ class SupportResistanceLine:
         return support_resistance_pos
 
     @cached_property
-    def support_resistance_df(self):
+    def support_resistance_df(self) -> pd.DataFrame:
         return (
             pd.Series(
                 self.y.loc[self.support_resistance_pos],
@@ -252,11 +263,11 @@ class SupportResistanceLine:
             .reset_index()
         )
 
-    def plot_real_extreme_points(self, show=False):
+    def plot_real_extreme_points(self, show: bool = False):
         return self.show_line(self.support_resistance_df, show=show)
 
     @cached_property
-    def clustered_pos(self, show=False, inplace=True):
+    def clustered_pos(self) -> List[int]:
         def clustering_nearest(num_list, thresh=len(self.df) / 80):
             sr = pd.Series(num_list).sort_values().reset_index(drop=True)
             while sr.diff().min() < thresh:
@@ -277,14 +288,16 @@ class SupportResistanceLine:
         clustered_pos = clustering_nearest(self.support_resistance_df['x'].tolist())
         return clustered_pos
 
-    def plot_clustered_pos(self, show=False):
+    def plot_clustered_pos(self, show: bool = False):
         support_resistance_df = self.support_resistance_df.loc[
             lambda _: _['x'].isin(self.clustered_pos)
         ].copy()
 
         return self.show_line(support_resistance_df, show=show)
 
-    def score_lines_from_a_point(self, last_support_resistance_pos):
+    def score_lines_from_a_point(
+        self, last_support_resistance_pos: pd.Series
+    ) -> pd.DataFrame:
         '''assign scores to all lines through a point'''
 
         # 只考虑该点之前的点
@@ -380,7 +393,12 @@ class SupportResistanceLine:
 
         return score_df
 
-    def show_line(self, points_df, *straight_line_list, show=False):
+    def show_line(
+        self,
+        points_df: pd.DataFrame,
+        *straight_line_list: StraightLine,
+        show: bool = False,
+    ):
         fig, ax = plt.subplots(1, figsize=(16, 9))
         self.df.plot(ax=ax)
 
@@ -402,7 +420,7 @@ class SupportResistanceLine:
         return fig, ax
 
     @cached_property
-    def last_area_support_resistance_df(self):
+    def last_area_support_resistance_df(self) -> pd.DataFrame:
         '''对时间轴后40%上的所有点寻找最佳支撑或压力线'''
         last_area_support_resistance_df = self.support_resistance_df[
             self.support_resistance_df['x'] > len(self.df) * 0.75
@@ -447,7 +465,7 @@ class SupportResistanceLine:
         )
 
     @cached_property
-    def best_line(self):
+    def best_line(self) -> StraightLine:
         best_line_data = self.last_area_support_resistance_df.iloc[0]
         best_line = StraightLine(
             best_line_data['x1'],
@@ -457,9 +475,8 @@ class SupportResistanceLine:
         )
         return best_line
 
-    def plot_best_line(self, show=False):
+    def plot_best_line(self, show: bool = False):
         '''画出最好的线'''
-
         return self.show_line(self.support_resistance_df, self.best_line, show=show)
 
     def plot_steps(self):
@@ -496,7 +513,7 @@ class SupportResistanceLine:
         print('绘制图形...')
         self.plot_both()
 
-    def plot_both(self, ax=None, show=False):
+    def plot_both(self, ax=None, show: bool = False):
         if self.kind != 'support':
             raise ValueError("只有支撑线对象可以调用此方法")
 
