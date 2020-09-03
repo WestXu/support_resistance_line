@@ -222,11 +222,12 @@ class SupportResistanceLine:
 
             support_resistance_pos.append(extreme_around(left_pos, right_pos))
 
+        # deduplicate
+        support_resistance_pos = sorted(set(support_resistance_pos))
+
+        # remove 0
         if 0 in support_resistance_pos:
             support_resistance_pos.remove(0)
-
-        # 去重
-        support_resistance_pos = list(set(support_resistance_pos))
 
         return support_resistance_pos
 
