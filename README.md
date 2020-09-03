@@ -1,5 +1,7 @@
 # Support Resistance Line
 
+[![pypi](https://flat.badgen.net/pypi/v/support_resistance_line)](https://pypi.org/project/support_resistance_line/)
+
 ## Installation
 
 You can install from pypi using `pip install support_resistance_line`, or install from source using `python3 setup.py install`
