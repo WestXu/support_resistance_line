@@ -1,9 +1,11 @@
 import math
 from collections import Iterable
+from typing import List, Literal, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from lazy_object_proxy.utils import cached_property
 from sklearn import metrics
 from sklearn.cluster import KMeans
 
@@ -20,7 +22,7 @@ class StraightLine:
                 self.slope = (y2 - y1) / (x2 - x1)
         self.intercept = y1 - self.slope * x1
 
-    def point_distance(self, x0, y0):
+    def get_point_distance(self, x0, y0):
         return abs(self.slope * x0 - y0 + self.intercept) / math.sqrt(
             self.slope ** 2 + 1
         )
@@ -77,57 +79,75 @@ class SupportResistanceLine:
         if not isinstance(data, pd.Series):
             raise TypeError('data必须为pd.Series格式')
 
-        self.y = data.reset_index(drop=True)
-        self.y.name = 'y'
-        self.df = pd.DataFrame({'y': self.y})
-        self.df.index.name = 'x'
-        self.x = self.df.reset_index()['x']
+        self.y = data.reset_index(drop=True).rename('y')
+        self.df = self.y.to_frame().rename_axis('x')
+        self.x = self.df.index.to_series()
 
         self.kind = kind
         self.dot_color = 'g' if kind == 'support' else 'r'
 
-    def find_best_poly(self, show=False):
-        df = self.df.copy()
-
+    @cached_property
+    def iterated_poly_fits(
+        self,
+    ) -> Tuple[pd.DataFrame, np.polynomial.chebyshev.Chebyshev]:
+        fit_df = self.df.copy()
         rolling_window = int(len(self.y) / 30)
-        df['y_roll_mean'] = df['y'].rolling(rolling_window, min_periods=1).mean()
+        fit_df['y_roll_mean'] = (
+            fit_df['y'].rolling(rolling_window, min_periods=1).mean()
+        )
 
         # 度量原始y值和均线y_roll_mean的距离distance_mean
-        distance_mean = np.sqrt(metrics.mean_squared_error(df.y, df.y_roll_mean))
+        distance_mean = np.sqrt(
+            metrics.mean_squared_error(fit_df.y, fit_df.y_roll_mean)
+        )
 
-        poly = int(len(self.y) / 40)
-        p = None
+        degree = int(len(self.y) / 40)
+        poly = None
         y_fit = None
-        while poly < 100:
+        while degree < 100:
             # 迭代计算1-100poly次regress_xy_polynomial的拟合曲线y_fit
-            p = np.polynomial.Chebyshev.fit(self.x, self.y, poly)
-            y_fit = p(self.x)
-            df[f'poly_{poly}'] = y_fit
+            poly = np.polynomial.Chebyshev.fit(self.x, self.y, degree)
+            y_fit = poly(self.x)
+            fit_df[f'poly_{degree}'] = y_fit
             # 使用metrics_func方法度量原始y值和拟合回归的趋势曲线y_fit的距离distance_fit
-            distance_fit = np.sqrt(metrics.mean_squared_error(df.y, y_fit))
+            distance_fit = np.sqrt(metrics.mean_squared_error(fit_df.y, y_fit))
             if distance_fit <= distance_mean * 0.6:
                 # 如果distance_fit <= distance_mean* 0.6即代表拟合曲线可以比较完美的代表原始曲线y的走势，停止迭代
                 break
-            poly += 1
+            degree += 1
 
-        self.best_poly = poly
-        self.p = p
-        self.df['best_poly'] = y_fit
+        return fit_df, poly
 
+    @cached_property
+    def best_poly(self):
+        return self.iterated_poly_fits[1]
+
+    @cached_property
+    def poly_degree(self) -> int:
+        '''Degree(s) of the fitting polynomials'''
+        return self.best_poly.degree()
+
+    @cached_property
+    def poly_fit(self) -> pd.Series:
+        '''fitted series'''
+        return self.best_poly(self.x)
+
+    def plot_best_poly(self, show=False):
+        fig, ax = plt.subplots(1, figsize=(16, 9))
+        df = self.df.assign(best_poly=self.poly_fit)
+        df.plot(ax=ax, figsize=(16, 9), colormap='coolwarm')
         if show:
-            _, ax = plt.subplots(1, figsize=(16, 9))
-            df.plot(ax=ax, figsize=(16, 9), colormap='coolwarm')
             plt.show()
+        return fig, ax
 
-    def find_extreme_pos(self, show=False):
-        p = self.p
-
+    @cached_property
+    def extreme_pos(self) -> Tuple[List[int], List[int]]:
         # 求导函数的根
-        extreme_pos = [int(round(_.real)) for _ in p.deriv().roots()]
+        extreme_pos = [int(round(_.real)) for _ in self.best_poly.deriv().roots()]
         extreme_pos = [_ for _ in extreme_pos if _ > 0 and _ < len(self.df)]
 
         # 通过二阶导数分拣极大值和极小值
-        second_deriv = p.deriv(2)
+        second_deriv = self.best_poly.deriv(2)
         min_extreme_pos = []
         max_extreme_pos = []
         for pos in extreme_pos:
@@ -136,26 +156,31 @@ class SupportResistanceLine:
             elif second_deriv(pos) < 0:
                 max_extreme_pos.append(pos)
 
-        self.min_extreme_pos = min_extreme_pos
-        self.max_extreme_pos = max_extreme_pos
+        return max_extreme_pos, min_extreme_pos
 
+    def plot_extreme_pos(self, show=False):
+
+        max_extreme_pos, min_extreme_pos = self.extreme_pos
+
+        fig, ax = plt.subplots(1, figsize=(16, 9))
+        self.df.plot(ax=ax)
+        ax.scatter(
+            min_extreme_pos, [self.best_poly(_) for _ in min_extreme_pos], s=50, c='g'
+        )
+        ax.scatter(
+            max_extreme_pos, [self.best_poly(_) for _ in max_extreme_pos], s=50, c='r'
+        )
         if show:
-            _, ax = plt.subplots(1, figsize=(16, 9))
-            self.df.plot(ax=ax)
-            ax.scatter(
-                self.min_extreme_pos, [p(_) for _ in self.min_extreme_pos], s=50, c='g'
-            )
-            ax.scatter(
-                self.max_extreme_pos, [p(_) for _ in self.max_extreme_pos], s=50, c='r'
-            )
-
             plt.show()
 
-    # 拟合极值点附近的真实极值
-    def find_real_extreme_points(self, show=False):
+        return fig, ax
 
-        # 寻找一个支撑点两边最近的压力点，或反之
+    @cached_property
+    def support_resistance_pos(self):
+        '''拟合极值点附近的真实极值'''
+
         def find_left_and_right_pos(pos, refer_pos):
+            '''寻找一个支撑点两边最近的压力点，或反之'''
             refer_sr = pd.Series(refer_pos)
             left_pos = (
                 refer_sr[refer_sr < pos].iloc[-1]
@@ -169,8 +194,8 @@ class SupportResistanceLine:
             )
             return left_pos, right_pos
 
-        # 寻找一个拟合极值点附近的真实极值
         def extreme_around(left_pos, right_pos):
+            '''寻找一个拟合极值点附近的真实极值'''
 
             if self.kind == 'support':
                 extreme_around_pos = self.y.iloc[left_pos:right_pos].idxmin()
@@ -183,10 +208,10 @@ class SupportResistanceLine:
 
             return extreme_around_pos
 
-        extreme_pos = self.min_extreme_pos
-        refer_pos = self.max_extreme_pos
-        if self.kind == 'resistance':
-            extreme_pos, refer_pos = refer_pos, extreme_pos
+        if self.kind == 'support':
+            refer_pos, extreme_pos = self.extreme_pos
+        else:
+            extreme_pos, refer_pos = self.extreme_pos
 
         support_resistance_pos = []
         for _, pos in enumerate(extreme_pos):
@@ -203,21 +228,25 @@ class SupportResistanceLine:
         # 去重
         support_resistance_pos = list(set(support_resistance_pos))
 
-        support_resistance_sr = pd.Series(
-            self.y.loc[support_resistance_pos], index=support_resistance_pos
-        ).sort_index()
+        return support_resistance_pos
 
-        support_resistance_sr.index.name = 'x'
-        support_resistance_df = support_resistance_sr.reset_index()
+    @cached_property
+    def support_resistance_df(self):
+        return (
+            pd.Series(
+                self.y.loc[self.support_resistance_pos],
+                index=self.support_resistance_pos,
+            )
+            .sort_index()
+            .rename_axis('x')
+            .reset_index()
+        )
 
-        self.support_resistance_df = support_resistance_df
+    def plot_real_extreme_points(self, show=False):
+        return self.show_line(self.support_resistance_df, show=show)
 
-        if show:
-            self.show_line(support_resistance_df)
-
-        return self.support_resistance_df
-
-    def cluster_nearest_support_resistance_pos(self, show=False, inplace=True):
+    @cached_property
+    def clustered_pos(self, show=False, inplace=True):
         def clustering_nearest(num_list, thresh=len(self.df) / 80):
             sr = pd.Series(num_list).sort_values().reset_index(drop=True)
             while sr.diff().min() < thresh:
@@ -236,59 +265,21 @@ class SupportResistanceLine:
             return sr.tolist()
 
         clustered_pos = clustering_nearest(self.support_resistance_df['x'].tolist())
+        return clustered_pos
 
-        support_resistance_df = self.support_resistance_df[
-            self.support_resistance_df['x'].isin(clustered_pos)
+    def plot_clustered_pos(self, show=False):
+        support_resistance_df = self.support_resistance_df.loc[
+            lambda _: _['x'].isin(self.clustered_pos)
         ].copy()
 
-        if show:
-            self.show_line(support_resistance_df)
-
-        if inplace:
-            self.support_resistance_df = support_resistance_df
-
-        return support_resistance_df
-
-    def cluster_kmeans_support_resistance_pos(self, show=False, inplace=True):
-        # 聚类
-
-        support_resistance_df = self.support_resistance_df.copy()
-        support_resistance_df['cluster'] = clustering_kmeans(
-            support_resistance_df.x, 0.001
-        )
-        print(
-            f"共{len(support_resistance_df)}个极值点，聚类为{support_resistance_df['cluster'].max() + 1}个类"
-        )
-
-        def extreme_in_cluster(cluster_df):
-            if self.kind == 'support':
-                cluster_df['is_extreme'] = cluster_df['y'] == cluster_df['y'].min()
-            else:
-                cluster_df['is_extreme'] = cluster_df['y'] == cluster_df['y'].max()
-            return cluster_df
-
-        # 只保留每个类的最小值
-        support_resistance_df = support_resistance_df.groupby('cluster').apply(
-            extreme_in_cluster
-        )
-        support_resistance_df = support_resistance_df[
-            support_resistance_df['is_extreme']
-        ].drop('is_extreme', axis=1)
-
-        if show:
-            self.show_line(support_resistance_df)
-
-        if inplace:
-            self.support_resistance_df = support_resistance_df
-
-        return support_resistance_df
+        return self.show_line(support_resistance_df, show=show)
 
     def score_lines_from_a_point(self, last_support_resistance_pos):
+        '''assign scores to all lines through a point'''
 
         # 只考虑该点之前的点
-        support_resistance_df = self.support_resistance_df[
-            (self.support_resistance_df['x'] <= last_support_resistance_pos['x'])
-            # & (self.support_resistance_df['x'] >= len(self.df) * 0.25)
+        support_resistance_df = self.support_resistance_df.loc[
+            lambda _: _['x'] <= last_support_resistance_pos['x']
         ].copy()
 
         if len(support_resistance_df) <= 2:
@@ -346,15 +337,9 @@ class SupportResistanceLine:
                 cluster_df.iloc[-1]['y'],
                 slope=cluster_df.iloc[-1]['slope'],
             )
-            mean_distance = line.point_distance(avg_x, avg_y)
+            mean_distance = line.get_point_distance(avg_x, avg_y)
             std = cluster_df.iloc[:-1]['x'].std(ddof=0)
             mean_x = cluster_df.iloc[:-1]['x'].mean()
-            # divisor = (
-            #     std
-            #     # * math.sqrt(len(cluster_df) + 1)
-            #     * (len(cluster_df) + 1) ** 2
-            # )
-            # score = mean_distance / divisor
 
             return pd.DataFrame(
                 {
@@ -368,8 +353,6 @@ class SupportResistanceLine:
                     'mean_distance': mean_distance,
                     'mean_x': mean_x,
                     'std': std,
-                    # 'divisor': divisor,
-                    # 'score': score
                 },
                 index=[0],
             )
@@ -387,7 +370,7 @@ class SupportResistanceLine:
 
         return score_df
 
-    def show_line(self, points_df, *straight_line_list):
+    def show_line(self, points_df, *straight_line_list, show=False):
         fig, ax = plt.subplots(1, figsize=(16, 9))
         self.df.plot(ax=ax)
 
@@ -402,18 +385,18 @@ class SupportResistanceLine:
                 st_line.predict(self.x, limit=(self.y.min(), self.y.max())),
                 label=(['1st', '2nd', '3rd'] + list('456789abcdefghijklmnopq'))[i],
             )
-
         plt.legend()
-        plt.show()
+        if show:
+            plt.show()
 
-    # 对时间轴后40%上的所有点寻找最佳支撑或压力线
-    def find_lines_in_the_last_area(self):
+        return fig, ax
+
+    @cached_property
+    def last_area_support_resistance_df(self):
+        '''对时间轴后40%上的所有点寻找最佳支撑或压力线'''
         last_area_support_resistance_df = self.support_resistance_df[
             self.support_resistance_df['x'] > len(self.df) * 0.75
         ].copy()
-        #         last_area_support_resistance_df['min_distance'] = last_area_support_resistance_df.apply(
-        #             lambda _: self.find_best_line_from_a_point(_).min_score, axis=1
-        #         )
 
         df_list = [
             self.score_lines_from_a_point(row)
@@ -433,17 +416,15 @@ class SupportResistanceLine:
             / last_area_support_resistance_df['std']
         ).rank() / last_area_support_resistance_df['count']
 
-        self.last_area_support_resistance_df = last_area_support_resistance_df.sort_values(
+        last_area_support_resistance_df = last_area_support_resistance_df.sort_values(
             ['score', 'count'], ascending=[True, False]
-        ).reset_index(
-            drop=True
-        )
+        ).reset_index(drop=True)
 
-        return self.last_area_support_resistance_df
+        return last_area_support_resistance_df
 
-    # 画出最好的3条线
-    def show_top_lines(self, num=3):
-        self.show_line(
+    def plot_top_lines(self, num=3, show=False):
+        '''画出最好的3条线'''
+        return self.show_line(
             self.support_resistance_df,  # 描点
             *(
                 self.last_area_support_resistance_df[:num]
@@ -452,69 +433,69 @@ class SupportResistanceLine:
                 )
                 .tolist()
             ),
+            show=show,
         )
 
-    # 画出最好的线
-    def find_best_line(self, show=False):
+    @cached_property
+    def best_line(self):
         best_line_data = self.last_area_support_resistance_df.iloc[0]
-        self.best_line = StraightLine(
+        best_line = StraightLine(
             best_line_data['x1'],
             best_line_data['y1'],
             best_line_data['x2'],
             best_line_data['y2'],
         )
+        return best_line
 
-        if show:
-            self.show_line(
-                self.support_resistance_df, self.best_line,
-            )
-        return self.best_line
+    def plot_best_line(self, show=False):
+        '''画出最好的线'''
 
-    def show_both(self, ax=None, show_step=False):
+        return self.show_line(self.support_resistance_df, self.best_line, show=show)
+
+    def plot_steps(self):
         if self.kind != 'support':
             raise ValueError("只有支撑线对象可以调用此方法")
+        print('寻找最佳拟合多项式曲线...')
+        self.plot_best_poly(show=True)
 
-        if show_step:
-            print('寻找最佳拟合多项式曲线...')
-        self.find_best_poly(show=show_step)
-        if show_step:
-            print('寻找拟合曲线极值点...')
-        self.find_extreme_pos(show=show_step)
+        print('寻找拟合曲线极值点...')
+        self.plot_extreme_pos(show=True)
 
-        if show_step:
-            print('寻找支撑点...')
-        self.find_real_extreme_points(show=show_step)
-        if show_step:
-            print('支撑点聚类...')
-        self.cluster_nearest_support_resistance_pos(show=show_step)
-        if show_step:
-            print('遍历从时间序列后25%区域出发的所有支撑线...')
-        self.find_lines_in_the_last_area()
+        print('寻找支撑点...')
+        self.plot_real_extreme_points(show=True)
+
+        print('支撑点聚类...')
+        self.plot_clustered_pos(show=True)
+
+        print('遍历从时间序列后25%区域出发的所有支撑线...')
+        self.last_area_support_resistance_df
 
         resistance_line = SupportResistanceLine(self.y, 'resistance')
         resistance_line.df = self.df
-        resistance_line.min_extreme_pos = self.min_extreme_pos
-        resistance_line.max_extreme_pos = self.max_extreme_pos
+        resistance_line.extreme_pos = self.extreme_pos
 
-        if show_step:
-            print('寻找阻力点...')
-        resistance_line.find_real_extreme_points(show=show_step)
-        if show_step:
-            print('阻力点聚类...')
-        resistance_line.cluster_nearest_support_resistance_pos(show=show_step)
-        if show_step:
-            print('遍历从时间序列后25%区域出发的所有阻力线...')
-        resistance_line.find_lines_in_the_last_area()
+        print('寻找阻力点...')
+        resistance_line.plot_real_extreme_points(show=True)
+
+        print('阻力点聚类...')
+        resistance_line.plot_clustered_pos(show=True)
+
+        print('遍历从时间序列后25%区域出发的所有阻力线...')
+        resistance_line.last_area_support_resistance_df
 
         self.resistance_line = resistance_line
 
-        if show_step:
-            print('绘制图形...')
+        print('绘制图形...')
+        self.plot_both()
 
-        is_new = False
+    def plot_both(self, ax=None, show=False):
+        if self.kind != 'support':
+            raise ValueError("只有支撑线对象可以调用此方法")
+
         if ax is None:
             fig, ax = plt.subplots(1, figsize=(16, 9))
-            is_new = True
+        else:
+            fig = ax.get_figure()
 
         self.df.plot(ax=ax)
 
@@ -526,6 +507,11 @@ class SupportResistanceLine:
             c=self.dot_color,
             label='support_dots',
         )
+
+        resistance_line = SupportResistanceLine(self.y, 'resistance')
+        resistance_line.df = self.df
+        resistance_line.extreme_pos = self.extreme_pos
+
         ax.scatter(
             resistance_line.support_resistance_df.x,
             resistance_line.support_resistance_df.y,
@@ -536,20 +522,20 @@ class SupportResistanceLine:
 
         ax.plot(
             self.x,
-            self.find_best_line().predict(self.x, (self.y.min(), self.y.max())),
+            self.best_line.predict(self.x, (self.y.min(), self.y.max())),
             label='support_line',
             c='g',
         )
         ax.plot(
             self.x,
-            resistance_line.find_best_line().predict(
-                self.x, (self.y.min(), self.y.max())
-            ),
+            resistance_line.best_line.predict(self.x, (self.y.min(), self.y.max())),
             label='resistance_line',
             c='r',
         )
 
         ax.legend()
 
-        if is_new:
+        if show:
             plt.show()
+
+        return fig, ax

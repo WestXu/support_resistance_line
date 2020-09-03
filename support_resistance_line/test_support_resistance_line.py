@@ -44,7 +44,6 @@ def test():
     data_sr = pd.Series(sum(raw_data, []))  # transform to 1d series
 
     srl = SupportResistanceLine(data_sr)
-    srl.show_both(show_step=False)
 
     assert srl.best_line.slope == 16.2383375
     assert srl.best_line.intercept == 2661.154275
