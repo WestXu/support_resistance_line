@@ -6,16 +6,6 @@ import numpy as np
 import pandas as pd
 from sklearn import metrics
 from sklearn.cluster import KMeans
-from tqdm import tqdm
-
-
-def progress_map(func, iterator, desc=None):
-    with tqdm(iterator, desc=desc, ncols=100) as bar:
-        results = []
-        for i in bar:
-            bar.set_postfix_str(str(i))
-            results.append(func(i))
-    return results
 
 
 class StraightLine:

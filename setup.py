@@ -18,7 +18,7 @@ setuptools.setup(
     author="WestXu",
     author_email="xu-lai-xi@qq.com",
     url="https://github.com/WestXu/support_resistance_line",
-    install_requires=["matplotlib", "numpy", "sklearn", "tqdm"],
+    install_requires=["matplotlib", "numpy", "sklearn"],
     license="MIT",
     classifiers=[
         "License :: OSI Approved :: MIT License",
