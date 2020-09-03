@@ -6,7 +6,7 @@ CURRENT_DIR = Path(__file__).parent
 
 setuptools.setup(
     name="support_resistance_line",
-    version="0.0.1",
+    version="0.0.3",
     packages=setuptools.find_packages(),
     python_requires=">=3.6",
     description=(
