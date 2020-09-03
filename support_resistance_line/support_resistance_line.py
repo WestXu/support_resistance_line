@@ -90,9 +90,10 @@ class SupportResistanceLine:
         if not isinstance(data, pd.Series):
             raise TypeError('data should be pd.Series')
 
-        self.y = data.reset_index(drop=True).rename('y')
-        self.df = self.y.to_frame().rename_axis('x')
-        self.x = self.df.index.to_series()
+        self.y = data.reset_index(drop=True).rename('y').rename_axis('x')
+        self.x = self.y.index.to_series()
+
+        self.length = len(self.y)
 
         self.kind = kind
         self.dot_color = 'g' if kind == 'support' else 'r'
@@ -102,15 +103,14 @@ class SupportResistanceLine:
         srl = SupportResistanceLine(
             self.y, 'resistance' if self.kind == 'support' else 'support'
         )
-        srl.df = self.df
-        srl.extreme_pos = self.extreme_pos
+        srl.extreme_pos = self.extreme_pos  # avoid repeated calc
         return srl
 
     @cached_property
     def iterated_poly_fits(
         self,
     ) -> Tuple[pd.DataFrame, np.polynomial.chebyshev.Chebyshev]:
-        fit_df = self.df.copy()
+        fit_df = self.y.to_frame()
         rolling_window = int(len(self.y) / 30)
         fit_df['y_roll_mean'] = (
             fit_df['y'].rolling(rolling_window, min_periods=1).mean()
@@ -152,9 +152,9 @@ class SupportResistanceLine:
         '''Fitted series'''
         return self.best_poly(self.x)
 
-    def plot_best_poly(self, show=False):
+    def plot_poly(self, show=False):
         fig, ax = plt.subplots(1, figsize=(16, 9))
-        df = self.df.assign(best_poly=self.poly_fit)
+        df = self.iterated_poly_fits[0].assign(y=self.y, best_poly=self.poly_fit)
         df.plot(ax=ax, figsize=(16, 9), colormap='coolwarm')
         if show:
             plt.show()
@@ -164,7 +164,7 @@ class SupportResistanceLine:
     def extreme_pos(self) -> Tuple[List[int], List[int]]:
         # roots derived function
         extreme_pos = [int(round(_.real)) for _ in self.best_poly.deriv().roots()]
-        extreme_pos = [_ for _ in extreme_pos if _ > 0 and _ < len(self.df)]
+        extreme_pos = [_ for _ in extreme_pos if _ > 0 and _ < self.length]
 
         # distinguish maximum and minimum using second derivative
         second_deriv = self.best_poly.deriv(2)
@@ -182,7 +182,7 @@ class SupportResistanceLine:
         max_extreme_pos, min_extreme_pos = self.extreme_pos
 
         fig, ax = plt.subplots(1, figsize=(16, 9))
-        self.df.plot(ax=ax)
+        self.y.to_frame().assign(best_poly=self.poly_fit).plot(ax=ax)
         ax.scatter(
             min_extreme_pos, [self.best_poly(_) for _ in min_extreme_pos], s=50, c='g'
         )
@@ -209,7 +209,7 @@ class SupportResistanceLine:
             right_pos = (
                 refer_sr[refer_sr > pos].iloc[0]
                 if len(refer_sr[refer_sr > pos]) > 0
-                else len(self.df)
+                else self.length
             )
             return left_pos, right_pos
 
@@ -234,7 +234,7 @@ class SupportResistanceLine:
 
         support_resistance_pos = []
         for _, pos in enumerate(extreme_pos):
-            if pos in [0, len(self.df)]:
+            if pos in [0, self.length]:
                 continue
 
             left_pos, right_pos = find_left_and_right_pos(pos, refer_pos)
@@ -267,15 +267,15 @@ class SupportResistanceLine:
 
     @cached_property
     def clustered_pos(self) -> List[int]:
-        def clustering_nearest(num_list, thresh=len(self.df) / 80):
+        def clustering_nearest(num_list, thresh=self.length / 80):
             sr = pd.Series(num_list).sort_values().reset_index(drop=True)
             while sr.diff().min() < thresh:
                 index1 = sr.diff().idxmin()
                 index2 = index1 - 1
                 num1 = sr[index1]
                 num2 = sr[index2]
-                y1 = self.df['y'].iloc[num1]
-                y2 = self.df['y'].iloc[num2]
+                y1 = self.y.iloc[num1]
+                y2 = self.y.iloc[num2]
 
                 smaller_y_index = index1 if y1 < y2 else index2
                 bigger_y_index = index1 if y1 > y2 else index2
@@ -399,7 +399,7 @@ class SupportResistanceLine:
         show: bool = False,
     ):
         fig, ax = plt.subplots(1, figsize=(16, 9))
-        self.df.plot(ax=ax)
+        self.y.to_frame().assign(best_poly=self.poly_fit).plot(ax=ax)
 
         # Green support dots, red resistance dots
         ax.scatter(
@@ -422,7 +422,7 @@ class SupportResistanceLine:
     def last_area_support_resistance_df(self) -> pd.DataFrame:
         '''Find best lines for the 40% right-most points'''
         last_area_support_resistance_df = self.support_resistance_df[
-            self.support_resistance_df['x'] > len(self.df) * 0.75
+            self.support_resistance_df['x'] > self.length * 0.75
         ].copy()
 
         df_list = [
@@ -481,7 +481,7 @@ class SupportResistanceLine:
         if self.kind != 'support':
             raise ValueError("Only support line object can call this method")
         print('Looking for best polynominal curve...')
-        self.plot_best_poly(show=True)
+        self.plot_poly(show=True)
 
         print('Looking for extreme pos of fitted curve...')
         self.plot_extreme_pos(show=True)
@@ -520,7 +520,7 @@ class SupportResistanceLine:
         else:
             fig = ax.get_figure()
 
-        self.df.plot(ax=ax)
+        self.y.to_frame().assign(best_poly=self.poly_fit).plot(ax=ax)
 
         ax.scatter(
             self.support_resistance_df.x,
